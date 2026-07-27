@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 [project]
 name = "patchcord"
-version = "0.2.0"
+version = "0.3.0"
 description = "Agent-facing control plane for CircuitPython boards"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -21,6 +21,7 @@ dependencies = [
     "pyserial>=3.5,<4",
     "rich>=15.0.0,<16",
     "ruamel-yaml>=0.19.1,<0.20",
+    "shellingham>=1.5.4,<2",
     "typer>=0.27.0,<0.28",
 ]
 

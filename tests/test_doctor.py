@@ -47,6 +47,7 @@ def test_doctor_reports_backend_versions_and_serial_access(
         "target_compatibility": "unchecked",
         "target_reason": "no_read_only_upstream_check",
     }
+    assert result["versions"]["dependencies"]["shellingham"] is not None
     assert result["serial_ports"][0]["readable"] is True
     assert result["serial_ports"][0]["writable"] is True
 

@@ -208,6 +208,90 @@ def test_root_help_lists_the_command_tree_and_version(
     assert version_result.stderr == ""
 
 
+def test_show_completion_falls_back_to_shell_environment(
+    runner: CliRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class DetectionFailure(Exception):
+        pass
+
+    def unavailable(
+        pid: int | None = None,
+        max_depth: int = 10,
+    ) -> tuple[str, str]:
+        del pid, max_depth
+        raise DetectionFailure
+
+    monkeypatch.setattr(cli, "_shell_detection_failure", DetectionFailure)
+
+    monkeypatch.setattr(cli, "_system_detect_shell", unavailable)
+    monkeypatch.setenv("SHELL", "/bin/zsh")
+
+    result = runner.invoke(cli.app, ["--show-completion"])
+
+    assert result.exit_code == 0
+    assert result.stderr == ""
+    assert "#compdef patchcord" in result.stdout
+    assert "_PATCHCORD_COMPLETE=complete_zsh patchcord" in result.stdout
+
+
+@pytest.mark.parametrize(
+    ("command", "name"),
+    [
+        ("/bin/zsh", "zsh"),
+        ("/usr/bin/bash", "bash"),
+        ("/opt/homebrew/bin/fish", "fish"),
+        (r"C:\Program Files\PowerShell\7\pwsh.exe", "pwsh"),
+        ("/bin/-zsh", "zsh"),
+    ],
+)
+def test_shell_environment_fallback_normalizes_command(
+    command: str,
+    name: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class DetectionFailure(Exception):
+        pass
+
+    def unavailable(
+        pid: int | None = None,
+        max_depth: int = 10,
+    ) -> tuple[str, str]:
+        del pid, max_depth
+        raise DetectionFailure
+
+    monkeypatch.setattr(cli, "_shell_detection_failure", DetectionFailure)
+
+    monkeypatch.setattr(cli, "_system_detect_shell", unavailable)
+    monkeypatch.setenv("SHELL", command)
+
+    detector = cast(
+        "Callable[[], tuple[str, str]]",
+        vars(cli)["_detect_shell_with_environment_fallback"],
+    )
+    assert detector() == (name, command)
+
+
+def test_detected_shell_takes_precedence_over_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def detected(
+        pid: int | None = None,
+        max_depth: int = 10,
+    ) -> tuple[str, str]:
+        del pid, max_depth
+        return "bash", "/bin/bash"
+
+    monkeypatch.setattr(cli, "_system_detect_shell", detected)
+    monkeypatch.setenv("SHELL", "/bin/zsh")
+
+    detector = cast(
+        "Callable[[], tuple[str, str]]",
+        vars(cli)["_detect_shell_with_environment_fallback"],
+    )
+    assert detector() == ("bash", "/bin/bash")
+
+
 @pytest.mark.parametrize(
     ("group", "summary"),
     [
@@ -840,8 +924,14 @@ def test_logs_reads_a_bounded_tail_without_opening_serial(
 def test_logs_rejects_conflicting_filters_as_json(
     runner: CliRunner,
     project: Project,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     del project
+
+    def unexpected_project() -> Project:
+        raise AssertionError("filter conflicts must gate project discovery")
+
+    monkeypatch.setattr(cli, "find_project", unexpected_project)
 
     result = runner.invoke(
         cli.app,
@@ -850,6 +940,24 @@ def test_logs_rejects_conflicting_filters_as_json(
 
     payload = _json_document(result, exit_code=int(ExitCode.USAGE))
     assert payload["errors"][0]["code"] == "logs_filter_conflict"
+
+
+def test_logs_rejects_invalid_duration_before_project_discovery(
+    runner: CliRunner,
+    project: Project,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    del project
+
+    def unexpected_project() -> Project:
+        raise AssertionError("invalid durations must gate project discovery")
+
+    monkeypatch.setattr(cli, "find_project", unexpected_project)
+
+    result = runner.invoke(cli.app, ["logs", "--since", "nonsense", "--json"])
+
+    payload = _json_document(result, exit_code=int(ExitCode.USAGE))
+    assert payload["errors"][0]["code"] == "invalid_duration"
 
 
 def test_click_parameter_errors_still_use_the_json_envelope(
@@ -1163,10 +1271,10 @@ def test_repl_rejects_eval_and_file_conflict_before_discovery(
 ) -> None:
     script = project.root / "script.py"
 
-    def unexpected_selection(**_kwargs: object) -> SelectedTarget:
-        raise AssertionError("input conflicts must gate target discovery")
+    def unexpected_project() -> Project:
+        raise AssertionError("input conflicts must gate project discovery")
 
-    monkeypatch.setattr(cli, "select_target", unexpected_selection)
+    monkeypatch.setattr(cli, "find_project", unexpected_project)
 
     result = runner.invoke(
         cli.app,
@@ -1184,15 +1292,42 @@ def test_repl_rejects_json_for_interactive_sessions(
 ) -> None:
     del project
 
-    def unexpected_selection(**_kwargs: object) -> SelectedTarget:
-        raise AssertionError("interactive JSON conflicts must gate discovery")
+    def unexpected_project() -> Project:
+        raise AssertionError("interactive JSON conflicts must gate project discovery")
 
-    monkeypatch.setattr(cli, "select_target", unexpected_selection)
+    monkeypatch.setattr(cli, "find_project", unexpected_project)
 
     result = runner.invoke(cli.app, ["repl", "--json"])
 
     payload = _json_document(result, exit_code=int(ExitCode.USAGE))
     assert payload["errors"][0]["code"] == "interactive_json_unsupported"
+
+
+@pytest.mark.parametrize(
+    "bounded_options",
+    [
+        ["--no-reset"],
+        ["--timeout", "7"],
+        ["--timeout", "30"],
+    ],
+)
+def test_repl_rejects_bounded_options_in_interactive_mode(
+    runner: CliRunner,
+    project: Project,
+    monkeypatch: pytest.MonkeyPatch,
+    bounded_options: list[str],
+) -> None:
+    del project
+
+    def unexpected_project() -> Project:
+        raise AssertionError("bounded option errors must gate project discovery")
+
+    monkeypatch.setattr(cli, "find_project", unexpected_project)
+
+    result = runner.invoke(cli.app, ["repl", *bounded_options, "--json"])
+
+    payload = _json_document(result, exit_code=int(ExitCode.USAGE))
+    assert payload["errors"][0]["code"] == "bounded_repl_input_required"
 
 
 @pytest.mark.parametrize(

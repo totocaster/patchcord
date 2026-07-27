@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from collections.abc import Sequence
 from contextlib import suppress
 from dataclasses import dataclass
+from importlib import import_module
 from math import isfinite
 from pathlib import Path
-from typing import Annotated, Any, NoReturn, Protocol, runtime_checkable
+from typing import Annotated, Any, NoReturn, Protocol, cast, runtime_checkable
 
 import typer
 from rich.console import Console
@@ -105,6 +107,50 @@ class _UsageFailure(Protocol):
         """Return the CLI framework's stable usage message."""
 
         ...
+
+
+class _ShellDetector(Protocol):
+    """Typed boundary around Shellingham's untyped detector."""
+
+    def __call__(
+        self,
+        pid: int | None = None,
+        max_depth: int = 10,
+    ) -> tuple[str, str]: ...
+
+
+class _ShellinghamModule(Protocol):
+    """Typed surface used from the untyped Shellingham package."""
+
+    detect_shell: _ShellDetector
+    ShellDetectionFailure: type[Exception]
+
+
+_shellingham = cast("_ShellinghamModule", import_module("shellingham"))
+_system_detect_shell = _shellingham.detect_shell
+_shell_detection_failure = _shellingham.ShellDetectionFailure
+
+
+def _detect_shell_with_environment_fallback(
+    pid: int | None = None,
+    max_depth: int = 10,
+) -> tuple[str, str]:
+    """Use ``SHELL`` only when process-tree shell detection is unavailable."""
+
+    try:
+        return _system_detect_shell(pid=pid, max_depth=max_depth)
+    except _shell_detection_failure:
+        command = os.environ.get("SHELL")
+        if not command:
+            raise
+        name = command.replace("\\", "/").rsplit("/", 1)[-1].casefold()
+        name = name.removesuffix(".exe").removeprefix("-")
+        if not name:
+            raise
+        return name, command
+
+
+_shellingham.detect_shell = _detect_shell_with_environment_fallback
 
 
 def _usage_command(arguments: Sequence[str]) -> str:
@@ -823,7 +869,6 @@ def logs_command(
     """Read the persistent host log without opening the board port."""
 
     command = "logs"
-    project = _require_project(command, json_output=json_output)
     if tail is not None and since is not None:
         _fail(
             command,
@@ -835,9 +880,16 @@ def logs_command(
             json_output=json_output,
         )
     try:
-        if since is not None:
-            parse_duration(since)
-        text = SerialLog(project.serial_log).read(tail=tail, since=since)
+        parsed_since = parse_duration(since) if since is not None else None
+    except ValueError as exc:
+        _fail(
+            command,
+            PatchcordError("invalid_duration", str(exc), exit_code=ExitCode.USAGE),
+            json_output=json_output,
+        )
+    project = _require_project(command, json_output=json_output)
+    try:
+        text = SerialLog(project.serial_log).read(tail=tail, since=parsed_since)
     except ValueError as exc:
         _fail(
             command,
@@ -970,14 +1022,17 @@ def repl_command(
     ] = None,
     no_reset: Annotated[
         bool,
-        typer.Option("--no-reset", help="Do not reset after bounded execution."),
+        typer.Option(
+            "--no-reset",
+            help="Do not reset after bounded --eval or --file execution.",
+        ),
     ] = False,
     timeout: Annotated[
         float,
         typer.Option(
             "--timeout",
             min=1,
-            help="Bounded execution timeout in seconds.",
+            help="Timeout in seconds for bounded --eval or --file execution.",
             callback=_finite_float,
         ),
     ] = 30.0,
@@ -989,7 +1044,6 @@ def repl_command(
     """Open miniterm or execute explicitly supplied code through circremote."""
 
     command = "repl"
-    project = _require_project(command, json_output=json_output)
     if eval_code is not None and file is not None:
         _fail(
             command,
@@ -1001,6 +1055,18 @@ def repl_command(
             json_output=json_output,
         )
     interactive = eval_code is None and file is None
+    timeout_source = ctx.get_parameter_source("timeout")
+    explicit_timeout = timeout_source is not None and timeout_source.name == "COMMANDLINE"
+    if interactive and (no_reset or explicit_timeout):
+        _fail(
+            command,
+            PatchcordError(
+                "bounded_repl_input_required",
+                "--no-reset and --timeout require --eval or --file.",
+                exit_code=ExitCode.USAGE,
+            ),
+            json_output=json_output,
+        )
     if interactive and json_output:
         _fail(
             command,
@@ -1011,6 +1077,7 @@ def repl_command(
             ),
             json_output=True,
         )
+    project = _require_project(command, json_output=json_output)
     state = _state(ctx)
     target: SelectedTarget | None = None
     try:

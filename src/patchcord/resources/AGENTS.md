@@ -200,7 +200,7 @@ CircuitPython boot banner.
   compatibility opt-in only when retaining old firmware is intentional.
   `--py` explicitly selects source files when no matching compiled artifacts
   exist; it does not guarantee that current library versions support old
-  firmware, and Patchcord v0.2 cannot select a historical bundle snapshot.
+  firmware, and Patchcord v0.3 cannot select a historical bundle snapshot.
 - `patchcord libs freeze [--allow-unsupported] [--json]`: replace
   `requirements.txt` with the board's installed library set.
 

@@ -241,7 +241,7 @@ patchcord \
 Global options go before the command name. The same pattern works with
 `deploy`, `monitor`, `reset`, `repl`, `libs`, and `hardware validate`.
 
-Patchcord v0.2 selects the drive and serial port independently; it cannot prove
+Patchcord v0.3 selects the drive and serial port independently; it cannot prove
 that two explicit overrides belong to the same physical board. When overriding
 both, make sure they identify the same device.
 
@@ -297,7 +297,7 @@ patchcord probe pins
 patchcord probe i2c
 ```
 
-In the current v0.2 release, these bounded commands are unavailable because the
+In the current v0.3 release, these bounded commands are unavailable because the
 pinned execution backend did not pass Patchcord's isolation and reset checks.
 They return `execution_backend_unavailable`. Interactive `repl`, deployment,
 monitoring, serial control, library management, and offline hardware validation
@@ -366,7 +366,7 @@ patchcord libs install --allow-unsupported --py
 ```
 
 This selects the source transport format, not historically compatible library
-versions. Patchcord v0.2 does not expose Circup's historical bundle-snapshot
+versions. Patchcord v0.3 does not expose Circup's historical bundle-snapshot
 selection, so a non-empty install onto very old firmware may remain unusable
 even with both flags. `freeze` and an empty-requirements install can still be
 used for inspection and smoke testing without replacing board libraries.
@@ -479,7 +479,7 @@ them automatically.
 
 ## Further documentation
 
-- [Patchcord v0.2 CLI and behavior contract](docs/SPEC.md)
+- [Patchcord v0.3 CLI and behavior contract](docs/SPEC.md)
 - [`hardware.yaml` v1 format](docs/WIRING_SPEC.md)
 - [`circremote` 0.12.0 acceptance result](docs/architecture/circremote-0.12.0-acceptance.md)
 - [Mounted-filesystem deployment decision](docs/architecture/deployment-filesystem-exception.md)

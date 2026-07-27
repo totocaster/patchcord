@@ -25,6 +25,7 @@ _DISTRIBUTIONS = {
     "pyserial": "pyserial",
     "rich": "rich",
     "ruamel.yaml": "ruamel-yaml",
+    "shellingham": "shellingham",
     "typer": "typer",
     "circremote": "circremote",
 }
