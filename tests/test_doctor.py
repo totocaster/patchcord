@@ -18,6 +18,7 @@ def test_doctor_reports_backend_versions_and_serial_access(
 ) -> None:
     port_path = tmp_path / "serial"
     port_path.write_bytes(b"")
+    monkeypatch.setattr(doctor, "_SERIAL_PORTS_ARE_FILESYSTEM_PATHS", True)
     monkeypatch.setattr(doctor, "list_circuitpython_drives", list)
     monkeypatch.setattr(
         doctor,
@@ -100,6 +101,7 @@ def test_doctor_requires_device_code_file_for_a_valid_project(
     project.hardware_file.write_text(
         "schema_version: 1\nboard:\n  id: test_board\nparts: {}\nnets: {}\n",
         encoding="utf-8",
+        newline="\n",
     )
     project.requirements_file.write_text("", encoding="utf-8")
 

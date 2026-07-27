@@ -48,7 +48,7 @@ def runner() -> CliRunner:
 @pytest.fixture
 def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Project:
     initialized, _, _ = init_project(tmp_path)
-    initialized.hardware_file.write_text(VALID_HARDWARE, encoding="utf-8")
+    initialized.hardware_file.write_text(VALID_HARDWARE, encoding="utf-8", newline="\n")
     monkeypatch.chdir(tmp_path)
     return initialized
 
@@ -520,7 +520,7 @@ def test_hardware_validate_stops_after_offline_errors(
     project: Project,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    project.hardware_file.write_text("[]\n", encoding="utf-8")
+    project.hardware_file.write_text("[]\n", encoding="utf-8", newline="\n")
 
     def unexpected_selection(**_kwargs: object) -> SelectedTarget:
         raise AssertionError("invalid offline data must gate connected validation")
@@ -779,7 +779,7 @@ def test_logs_reads_a_bounded_tail_without_opening_serial(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     project.logs_dir.mkdir(parents=True)
-    project.serial_log.write_text("one\ntwo\nthree\n", encoding="utf-8")
+    project.serial_log.write_text("one\ntwo\nthree\n", encoding="utf-8", newline="\n")
 
     class UnexpectedTransport:
         def __init__(self, _port: str) -> None:
@@ -843,7 +843,7 @@ def test_oversized_log_tail_is_a_structured_usage_error(
     project: Project,
 ) -> None:
     project.logs_dir.mkdir(parents=True)
-    project.serial_log.write_text("one\n", encoding="utf-8")
+    project.serial_log.write_text("one\n", encoding="utf-8", newline="\n")
 
     result = runner.invoke(
         cli.app,

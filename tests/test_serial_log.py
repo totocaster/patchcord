@@ -93,7 +93,7 @@ def test_explicit_tail_and_missing_log(tmp_path: Path) -> None:
     log = SerialLog(path)
 
     assert log.read(tail=10) == ""
-    path.write_text("one\ntwo\nthree\n", encoding="utf-8")
+    path.write_text("one\ntwo\nthree\n", encoding="utf-8", newline="\n")
     assert log.read(tail=2) == "two\nthree\n"
     assert log.read(tail=0) == ""
 
