@@ -71,16 +71,11 @@ jobs:
           EXPECTED_VERSION="${EXPECTED_VERSION#v}" \
             uv run --isolated --no-project --with ./dist/*.tar.gz tests/smoke_test.py
 
-      - name: Create checksums
-        run: sha256sum dist/* > SHA256SUMS
-
       - name: Store release artifacts
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: python-distributions
-          path: |
-            dist/
-            SHA256SUMS
+          path: dist/
           if-no-files-found: error
 
   publish:
@@ -116,6 +111,9 @@ jobs:
         with:
           name: python-distributions
           path: dist/
+
+      - name: Create checksums
+        run: sha256sum dist/* > SHA256SUMS
 
       - name: Publish the GitHub Release
         env:
