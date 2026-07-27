@@ -52,6 +52,7 @@ Patchcord creates:
 
 ```text
 my-board/
+├── AGENTS.md            # Patchcord and project workflow for coding agents
 ├── device/
 │   └── code.py          # Application files deployed to CIRCUITPY
 ├── hardware.yaml        # Intended board, parts, nets, and interfaces
@@ -61,6 +62,13 @@ my-board/
 
 If discovery is unambiguous, `patchcord init` records the connected board ID in
 `hardware.yaml`. Otherwise, fill in `board.id` before deploying.
+
+`AGENTS.md` teaches coding agents how to operate Patchcord, work safely with the
+initialized project, and use small Git checkpoints as a durable backup and
+restore history for hardware iterations. The board remains a deployment target;
+the Git-managed local project is the source of truth. As with other initialized
+project files, Patchcord preserves an existing `AGENTS.md` instead of
+overwriting it.
 
 Project commands can be run from the project root or any directory below it;
 Patchcord finds the nearest project automatically. Runtime locks and logs are

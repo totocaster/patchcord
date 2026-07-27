@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass
+from importlib.resources import files as resource_files
 from pathlib import Path
 
 from patchcord.errors import ProjectError
@@ -47,6 +48,10 @@ class Project:
     @property
     def requirements_file(self) -> Path:
         return self.root / "requirements.txt"
+
+    @property
+    def agents_file(self) -> Path:
+        return self.root / "AGENTS.md"
 
     @property
     def state_dir(self) -> Path:
@@ -107,6 +112,9 @@ def init_project(path: Path, *, board_id: str = "") -> tuple[Project, list[Path]
     """Create missing project files, preserving every existing file."""
 
     root = path.expanduser().resolve()
+    agents_template = (
+        resource_files("patchcord").joinpath("resources", "AGENTS.md").read_text(encoding="utf-8")
+    )
     root.mkdir(parents=True, exist_ok=True)
     project = Project(root)
     created: list[Path] = []
@@ -122,6 +130,7 @@ def init_project(path: Path, *, board_id: str = "") -> tuple[Project, list[Path]
             1,
         ),
         project.requirements_file: "",
+        project.agents_file: agents_template,
     }
     for file_path, content in files.items():
         if file_path.exists():

@@ -24,8 +24,38 @@ def test_init_project_creates_minimal_layout_without_overwriting(tmp_path: Path)
     assert existing.read_text(encoding="utf-8") == "adafruit_requests\n"
     assert existing in preserved
     assert project.device_dir / "code.py" in created
+    assert project.agents_file in created
     assert ".patchcord/" in (tmp_path / ".gitignore").read_text(encoding="utf-8")
     assert "device/settings.toml" in (tmp_path / ".gitignore").read_text(encoding="utf-8")
+
+
+def test_init_project_creates_agent_guide_for_iterative_hardware_work(
+    tmp_path: Path,
+) -> None:
+    project, _, _ = init_project(tmp_path)
+
+    guide = project.agents_file.read_text(encoding="utf-8")
+
+    assert "# Patchcord project guide for agents" in guide
+    assert "## Git-backed hardware iteration" in guide
+    assert "Git is the durable backup and restore" in guide
+    assert "`git revert`" in guide
+    assert "patchcord hardware validate --offline --json" in guide
+    assert "patchcord deploy --json" in guide
+    assert "does not delete unrelated or obsolete files" in guide
+    assert "Do not put secrets" in guide
+
+
+def test_init_project_preserves_existing_agent_guide(tmp_path: Path) -> None:
+    existing = tmp_path / "AGENTS.md"
+    custom_guide = "# Project-specific agent instructions\n"
+    existing.write_text(custom_guide, encoding="utf-8")
+
+    project, created, preserved = init_project(tmp_path)
+
+    assert project.agents_file.read_text(encoding="utf-8") == custom_guide
+    assert project.agents_file not in created
+    assert project.agents_file in preserved
 
 
 def test_init_project_is_idempotent(tmp_path: Path) -> None:
@@ -75,6 +105,7 @@ def test_cli_init_json_is_one_document(tmp_path: Path) -> None:
     assert payload["command"] == "init"
     assert payload["ok"] is True
     assert payload["result"]["root"] == str(project_path)
+    assert "AGENTS.md" in payload["result"]["created"]
 
 
 def test_cli_init_normalizes_non_utf8_gitignore_without_overwriting_it(tmp_path: Path) -> None:

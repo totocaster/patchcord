@@ -366,10 +366,18 @@ must be checked again before each major release.
 
 ### `patchcord init [PATH] [--json]`
 
-Creates `device/code.py`, `hardware.yaml`, `requirements.txt`, and the required
-`.gitignore` entries. If an unambiguous CircuitPython drive is selected, records
-its board ID. Existing project files are preserved. Implicit discovery
-ambiguity leaves the board ID empty; an invalid explicit override is an error.
+Creates `AGENTS.md`, `device/code.py`, `hardware.yaml`, `requirements.txt`, and
+the required `.gitignore` entries. `AGENTS.md` documents the project layout,
+Patchcord's agent-facing command workflow, bounded JSON operation, hardware
+safety rules, and iterative Git checkpoints for restoring known-good local code
+and redeploying it to a board after a failed experiment. It identifies the
+Git-managed local project as the durable source of truth and notes that
+deployment does not delete obsolete board files.
+
+If an unambiguous CircuitPython drive is selected, initialization records its
+board ID. Existing project files, including an existing `AGENTS.md`, are
+preserved. Implicit discovery ambiguity leaves the board ID empty; an invalid
+explicit override is an error.
 
 ### `patchcord status [--json]`
 
