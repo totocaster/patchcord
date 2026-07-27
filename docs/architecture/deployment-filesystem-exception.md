@@ -1,6 +1,6 @@
 # Mounted-filesystem deployment exception
 
-Status: **accepted for v0.1**
+Status: **accepted since v0.1**
 
 Evaluated: 2026-07-27
 

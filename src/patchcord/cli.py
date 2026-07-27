@@ -132,10 +132,10 @@ def _usage_command(arguments: Sequence[str]) -> str:
         if skip_next:
             skip_next = False
             continue
-        if argument in {"--mount", "--port"}:
+        if argument in {"--legacy-board-id", "--mount", "--port"}:
             skip_next = True
             continue
-        if argument.startswith(("--mount=", "--port=")):
+        if argument.startswith(("--legacy-board-id=", "--mount=", "--port=")):
             continue
         if argument not in commands:
             continue
@@ -171,6 +171,7 @@ class AppState:
 
     mount: Path | None = None
     port: str | None = None
+    legacy_board_id: str | None = None
 
 
 def _state(ctx: typer.Context) -> AppState:
@@ -210,6 +211,13 @@ def app_callback(
         str | None,
         typer.Option("--port", help="Explicit CircuitPython serial port."),
     ] = None,
+    legacy_board_id: Annotated[
+        str | None,
+        typer.Option(
+            "--legacy-board-id",
+            help="Assert an official board ID when an explicit legacy drive omits it.",
+        ),
+    ] = None,
     version: Annotated[
         bool,
         typer.Option(
@@ -223,7 +231,7 @@ def app_callback(
     """Set explicit target selection shared by board commands."""
 
     del version
-    ctx.obj = AppState(mount=mount, port=port)
+    ctx.obj = AppState(mount=mount, port=port, legacy_board_id=legacy_board_id)
 
 
 def _target_info(target: SelectedTarget | None) -> TargetInfo | None:
@@ -269,22 +277,34 @@ def init_command(
     state = _state(ctx)
     board_id = ""
     try:
-        target = select_target(mount=state.mount, port=state.port)
+        target = select_target(
+            mount=state.mount,
+            port=state.port,
+            legacy_board_id=state.legacy_board_id,
+            strict_port_ambiguity=False,
+        )
         if target.drive and target.drive.board_id:
             board_id = target.drive.board_id
     except DiscoveryError as error:
-        if state.mount is not None or state.port is not None:
+        if state.mount is not None or state.port is not None or state.legacy_board_id is not None:
             _fail("init", error, json_output=json_output)
         target = None
+    initialization_path = path
     try:
-        project, created, preserved = init_project(path, board_id=board_id)
+        initializes_current_directory = path.expanduser().resolve() == Path.cwd().resolve()
+        if initializes_current_directory:
+            initialization_path = find_project(path).root
+    except (OSError, RuntimeError, ProjectError):
+        pass
+    try:
+        project, created, preserved = init_project(initialization_path, board_id=board_id)
     except (OSError, RuntimeError, UnicodeError):
         _fail(
             "init",
             ProjectError(
                 "project_initialization_failed",
                 "Could not initialize the project.",
-                details={"path": str(path)},
+                details={"path": str(initialization_path)},
             ),
             json_output=json_output,
         )
@@ -329,6 +349,7 @@ def status_command(
         target = select_target(
             mount=state.mount,
             port=state.port,
+            legacy_board_id=state.legacy_board_id,
             require_mount=True,
             require_port=True,
         )
@@ -346,6 +367,7 @@ def status_command(
         return
     result: dict[str, Any] = {
         "board_id": drive.board_id,
+        "board_id_source": drive.board_id_source,
         "board_name": drive.board_name,
         "circuitpython_version": drive.circuitpython_version,
         "mount": str(drive.mount),
@@ -359,6 +381,7 @@ def status_command(
         table.add_column("Value")
         for key, value in (
             ("Board ID", drive.board_id or "unknown"),
+            ("Board ID source", drive.board_id_source or "unknown"),
             ("Board", drive.board_name or "unknown"),
             ("CircuitPython", drive.circuitpython_version or "unknown"),
             ("Mount", str(drive.mount)),
@@ -406,11 +429,15 @@ def doctor_command(
         console.print(f"CircuitPython REPL ports: {len(result['serial_ports'])}")
         capabilities = result["capabilities"]
         for name, capability in capabilities.items():
-            marker = (
-                "[green]available[/green]"
-                if capability["available"]
-                else "[yellow]unavailable[/yellow]"
-            )
+            if not capability["available"]:
+                marker = "[yellow]unavailable[/yellow]"
+            elif capability.get("target_compatibility") == "unchecked":
+                marker = (
+                    "[green]backend available[/green]; "
+                    "[yellow]target compatibility unchecked[/yellow]"
+                )
+            else:
+                marker = "[green]available[/green]"
             console.print(f"  {name}: {marker}")
 
     emit_result("doctor", result, json_output=json_output, human=human)
@@ -598,6 +625,7 @@ def deploy_command(
         target = select_target(
             mount=state.mount,
             port=state.port,
+            legacy_board_id=state.legacy_board_id,
             require_mount=True,
             require_port=True,
         )
@@ -706,6 +734,7 @@ def monitor_command(
         target = select_target(
             mount=state.mount,
             port=state.port,
+            legacy_board_id=state.legacy_board_id,
             require_port=True,
             strict_mount_ambiguity=False,
         )
@@ -843,6 +872,7 @@ def interrupt_command(
         target = select_target(
             mount=state.mount,
             port=state.port,
+            legacy_board_id=state.legacy_board_id,
             require_port=True,
             strict_mount_ambiguity=False,
         )
@@ -861,7 +891,8 @@ def interrupt_command(
         _fail(command, error, json_output=json_output, target=target)
     result = {
         "output": capture_result.text,
-        "interrupted": capture_result.interrupted,
+        "interrupt_sent": True,
+        "interrupted": True,
     }
 
     def human(_console: Console) -> None:
@@ -897,6 +928,7 @@ def reset_command(
         target = select_target(
             mount=state.mount,
             port=state.port,
+            legacy_board_id=state.legacy_board_id,
             require_port=True,
             strict_mount_ambiguity=False,
         )
@@ -985,6 +1017,7 @@ def repl_command(
         target = select_target(
             mount=state.mount,
             port=state.port,
+            legacy_board_id=state.legacy_board_id,
             require_port=True,
             strict_mount_ambiguity=False,
         )
@@ -1092,6 +1125,7 @@ def probe_pins_command(
         target = select_target(
             mount=state.mount,
             port=state.port,
+            legacy_board_id=state.legacy_board_id,
             require_port=True,
             strict_mount_ambiguity=False,
         )
@@ -1141,6 +1175,7 @@ def probe_i2c_command(
         target = select_target(
             mount=state.mount,
             port=state.port,
+            legacy_board_id=state.legacy_board_id,
             require_port=True,
             strict_mount_ambiguity=False,
         )
@@ -1183,6 +1218,17 @@ def libs_install_command(
         bool,
         typer.Option("--auto", help="Let circup inspect code.py on the selected board."),
     ] = False,
+    py: Annotated[
+        bool,
+        typer.Option("--py", help="Install source .py libraries instead of compiled .mpy files."),
+    ] = False,
+    allow_unsupported: Annotated[
+        bool,
+        typer.Option(
+            "--allow-unsupported",
+            help="Allow circup to operate on an unsupported CircuitPython release.",
+        ),
+    ] = False,
     json_output: Annotated[
         bool,
         typer.Option("--json", help="Emit one machine-readable JSON result."),
@@ -1199,6 +1245,7 @@ def libs_install_command(
         target = select_target(
             mount=state.mount,
             port=state.port,
+            legacy_board_id=state.legacy_board_id,
             require_mount=True,
             strict_port_ambiguity=False,
         )
@@ -1210,11 +1257,21 @@ def libs_install_command(
                 project.requirements_file,
                 packages=selected_packages,
                 auto=auto,
+                py=py,
+                board_id=target.drive.board_id,
+                circuitpython_version=target.drive.circuitpython_version,
+                allow_unsupported=allow_unsupported,
             )
     except PatchcordError as error:
         _fail(command, error, json_output=json_output, target=target)
     mode = "auto" if auto else ("packages" if selected_packages else "requirements")
-    result = {"mode": mode, "packages": selected_packages, "returncode": upstream.returncode}
+    result = {
+        "mode": mode,
+        "packages": selected_packages,
+        "py": py,
+        "allow_unsupported": allow_unsupported,
+        "returncode": upstream.returncode,
+    }
 
     def human(console: Console) -> None:
         if upstream.stdout:
@@ -1238,6 +1295,13 @@ def libs_install_command(
 @libs_app.command("freeze")
 def libs_freeze_command(
     ctx: typer.Context,
+    allow_unsupported: Annotated[
+        bool,
+        typer.Option(
+            "--allow-unsupported",
+            help="Allow circup to operate on an unsupported CircuitPython release.",
+        ),
+    ] = False,
     json_output: Annotated[
         bool,
         typer.Option("--json", help="Emit one machine-readable JSON result."),
@@ -1253,13 +1317,20 @@ def libs_freeze_command(
         target = select_target(
             mount=state.mount,
             port=state.port,
+            legacy_board_id=state.legacy_board_id,
             require_mount=True,
             strict_port_ambiguity=False,
         )
         if target.drive is None:
             raise DiscoveryError("mount_not_found", "No CircuitPython mount was selected.")
         with project_lock(project):
-            upstream = circup.freeze(target.drive.mount, project.requirements_file)
+            upstream = circup.freeze(
+                target.drive.mount,
+                project.requirements_file,
+                board_id=target.drive.board_id,
+                circuitpython_version=target.drive.circuitpython_version,
+                allow_unsupported=allow_unsupported,
+            )
         requirements = project.requirements_file.read_text(encoding="utf-8")
     except (OSError, PatchcordError) as error:
         if isinstance(error, PatchcordError):
@@ -1276,6 +1347,7 @@ def libs_freeze_command(
     result = {
         "requirements": requirements.splitlines(),
         "path": str(project.requirements_file),
+        "allow_unsupported": allow_unsupported,
         "returncode": upstream.returncode,
     }
 
@@ -1320,7 +1392,11 @@ def hardware_validate_command(
     if report.ok and report.document is not None and not offline:
         state = _state(ctx)
         try:
-            target = select_target(mount=state.mount, port=state.port)
+            target = select_target(
+                mount=state.mount,
+                port=state.port,
+                legacy_board_id=state.legacy_board_id,
+            )
         except PatchcordError as error:
             _fail(command, error, json_output=json_output)
         if target.drive is not None and target.serial is not None:

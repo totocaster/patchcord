@@ -1,8 +1,8 @@
 # Releasing Patchcord
 
 Patchcord keeps its PEP 440 version in `pyproject.toml` and uses matching
-annotated Git tags with a `v` prefix. For example, package version `0.1.1` is
-released from tag `v0.1.1`.
+annotated Git tags with a `v` prefix. For example, package version `0.2.0` is
+released from tag `v0.2.0`.
 
 The release workflow accepts only a tag whose version exactly matches the
 committed project version. It runs the complete test matrix, builds the wheel
@@ -30,8 +30,9 @@ Update uv before running release commands, then create a release branch:
 
 ```console
 uv self update
-git switch -c release/0.1.1
-uv version 0.1.1
+VERSION=0.2.0
+git switch -c "release/$VERSION"
+uv version "$VERSION"
 ```
 
 Use `0.2.0rc1`-style PEP 440 versions for prereleases. Commit both
@@ -43,11 +44,12 @@ passes.
 Update local `main`, confirm the version, and tag the exact merge commit:
 
 ```console
+VERSION=0.2.0
 git switch main
 git pull --ff-only
 uv version --short
-git tag -a v0.1.1 -m "Patchcord 0.1.1"
-git push origin v0.1.1
+git tag -a "v$VERSION" -m "Patchcord $VERSION"
+git push origin "v$VERSION"
 ```
 
 Approve the `pypi` environment deployment. The workflow publishes to PyPI
@@ -57,5 +59,6 @@ never move or reuse a released version tag.
 Verify the public release in a clean tool environment:
 
 ```console
-uv tool run --from patchcord==0.1.1 patchcord --version
+VERSION=0.2.0
+uv tool run --from "patchcord==$VERSION" patchcord --version
 ```

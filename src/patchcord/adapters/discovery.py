@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import re
 import shutil
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import Literal
 
 import psutil
 from adafruit_board_toolkit import circuitpython_serial
@@ -13,9 +14,11 @@ from adafruit_board_toolkit import circuitpython_serial
 from patchcord.errors import DiscoveryError
 from patchcord.models import TargetInfo
 
-_VERSION_RE = re.compile(r"(?:Adafruit )?CircuitPython\s+([^\s;]+)", re.IGNORECASE)
+_BOOT_BANNER_RE = re.compile(
+    r"^\s*(?:Adafruit\s+)?CircuitPython\s+([^\s;]+)[^;\n]*;\s*(.+?)\s*$",
+    re.IGNORECASE | re.MULTILINE,
+)
 _BOARD_ID_RE = re.compile(r"^\s*Board ID\s*:\s*(\S+)\s*$", re.IGNORECASE | re.MULTILINE)
-_BOARD_LINE_RE = re.compile(r"^[^;\n]+;\s*(.+?)\s*$", re.MULTILINE)
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,6 +31,7 @@ class Drive:
     circuitpython_version: str | None
     free_bytes: int | None
     total_bytes: int | None
+    board_id_source: Literal["boot_out", "legacy_override"] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,6 +57,7 @@ class SelectedTarget:
     def public(self) -> TargetInfo:
         return TargetInfo(
             board_id=self.drive.board_id if self.drive else None,
+            board_id_source=self.drive.board_id_source if self.drive else None,
             board_name=self.drive.board_name if self.drive else None,
             circuitpython_version=self.drive.circuitpython_version if self.drive else None,
             mount=str(self.drive.mount) if self.drive else None,
@@ -66,13 +71,12 @@ def _parse_boot_out(path: Path) -> tuple[str | None, str | None, str | None]:
         content = path.read_text(encoding="utf-8", errors="replace")
     except OSError:
         return None, None, None
-    version_match = _VERSION_RE.search(content)
+    banner_match = _BOOT_BANNER_RE.search(content)
     id_match = _BOARD_ID_RE.search(content)
-    board_match = _BOARD_LINE_RE.search(content)
     return (
-        id_match.group(1) if id_match else None,
-        board_match.group(1) if board_match else None,
-        version_match.group(1) if version_match else None,
+        id_match.group(1) if id_match and banner_match else None,
+        banner_match.group(2) if banner_match else None,
+        banner_match.group(1) if banner_match else None,
     )
 
 
@@ -108,7 +112,15 @@ def inspect_mount(path: Path) -> Drive:
     except OSError:
         free_bytes = None
         total_bytes = None
-    return Drive(mount, board_id, board_name, version, free_bytes, total_bytes)
+    return Drive(
+        mount,
+        board_id,
+        board_name,
+        version,
+        free_bytes,
+        total_bytes,
+        "boot_out" if board_id is not None else None,
+    )
 
 
 def list_circuitpython_drives() -> list[Drive]:
@@ -248,10 +260,54 @@ def _choose_port(
     return None
 
 
+def _apply_legacy_board_id(
+    drive: Drive | None,
+    override: str | None,
+    *,
+    explicit_mount: Path | None,
+) -> Drive | None:
+    """Attach an operator-asserted ID only to an explicit legacy drive."""
+
+    if override is None:
+        return drive
+    board_id = override.strip()
+    if not board_id or any(character.isspace() for character in board_id):
+        raise DiscoveryError(
+            "invalid_legacy_board_id",
+            "The legacy board ID must be one non-empty value without whitespace.",
+        )
+    if explicit_mount is None:
+        raise DiscoveryError(
+            "legacy_board_id_requires_mount",
+            "--legacy-board-id requires an explicit --mount.",
+        )
+    if drive is None:
+        raise DiscoveryError(
+            "mount_not_found",
+            "No CircuitPython drive was selected for the legacy board ID.",
+        )
+    if drive.board_id is not None:
+        if drive.board_id != board_id:
+            raise DiscoveryError(
+                "legacy_board_id_mismatch",
+                "The legacy board ID does not match the ID published by the selected drive.",
+                details={"override": board_id, "connected": drive.board_id},
+            )
+        return drive
+    if drive.circuitpython_version is None or drive.board_name is None:
+        raise DiscoveryError(
+            "legacy_board_evidence_unavailable",
+            "The selected drive does not have a parseable CircuitPython boot banner.",
+            details={"mount": str(drive.mount)},
+        )
+    return replace(drive, board_id=board_id, board_id_source="legacy_override")
+
+
 def select_target(
     *,
     mount: Path | None = None,
     port: str | None = None,
+    legacy_board_id: str | None = None,
     require_mount: bool = False,
     require_port: bool = False,
     strict_mount_ambiguity: bool = True,
@@ -264,6 +320,7 @@ def select_target(
         required=require_mount,
         strict_ambiguity=strict_mount_ambiguity,
     )
+    drive = _apply_legacy_board_id(drive, legacy_board_id, explicit_mount=mount)
     serial = _choose_port(
         port,
         required=require_port,

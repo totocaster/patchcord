@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, cast
 
@@ -233,6 +234,11 @@ def test_status_json_is_exactly_one_success_document_and_forwards_overrides(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: list[dict[str, object]] = []
+    assert target.drive is not None
+    target = SelectedTarget(
+        drive=replace(target.drive, board_id_source="legacy_override"),
+        serial=target.serial,
+    )
 
     def select(**kwargs: object) -> SelectedTarget:
         calls.append(kwargs)
@@ -248,6 +254,8 @@ def test_status_json_is_exactly_one_success_document_and_forwards_overrides(
             str(explicit_mount),
             "--port",
             "COM99",
+            "--legacy-board-id",
+            "test_board",
             "status",
             "--json",
         ],
@@ -259,6 +267,7 @@ def test_status_json_is_exactly_one_success_document_and_forwards_overrides(
     assert payload["errors"] == []
     assert payload["result"] == {
         "board_id": "test_board",
+        "board_id_source": "legacy_override",
         "board_name": "Test Board",
         "circuitpython_version": "10.0.0",
         "mount": str(_mount(target)),
@@ -269,6 +278,7 @@ def test_status_json_is_exactly_one_success_document_and_forwards_overrides(
         {
             "mount": explicit_mount,
             "port": "COM99",
+            "legacy_board_id": "test_board",
             "require_mount": True,
             "require_port": True,
         }
@@ -359,6 +369,39 @@ def test_doctor_reports_read_only_diagnostics(
     assert payload["result"] == doctor_result
     assert seen == [project]
     assert not project.state_dir.exists()
+
+
+def test_doctor_human_output_qualifies_library_backend_availability(
+    runner: CliRunner,
+    project: Project,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    doctor_result: dict[str, Any] = {
+        "versions": {
+            "patchcord": __version__,
+            "python": "3.14.0",
+        },
+        "capabilities": {
+            "libraries": {
+                "available": True,
+                "availability_scope": "backend",
+                "target_compatibility": "unchecked",
+            }
+        },
+        "project": {"found": True, "valid": True, "root": str(project.root)},
+        "drives": [],
+        "serial_ports": [],
+    }
+
+    def collect(_project: Project | None) -> dict[str, Any]:
+        return doctor_result
+
+    monkeypatch.setattr(cli, "collect_doctor", collect)
+
+    result = runner.invoke(cli.app, ["doctor"])
+
+    assert result.exit_code == 0
+    assert "libraries: backend available; target compatibility unchecked" in result.stdout
 
 
 def test_doctor_failure_is_normalized(
@@ -937,6 +980,7 @@ def test_interrupt_returns_and_persists_bounded_console_output(
     payload = _json_document(result)
     assert payload["result"] == {
         "output": "KeyboardInterrupt\n>>> ",
+        "interrupt_sent": True,
         "interrupted": True,
     }
     assert b"KeyboardInterrupt\n>>> " in project.serial_log.read_bytes()
@@ -1210,9 +1254,16 @@ def test_probe_commands_emit_structured_results_and_log_board_output(
 
 
 @pytest.mark.parametrize(
-    ("arguments", "expected_mode", "expected_packages", "expected_auto"),
+    (
+        "arguments",
+        "expected_mode",
+        "expected_packages",
+        "expected_auto",
+        "expected_py",
+        "expected_allow_unsupported",
+    ),
     [
-        ([], "requirements", [], False),
+        ([], "requirements", [], False, False, False),
         (
             ["adafruit_requests", "adafruit_bus_device"],
             "packages",
@@ -1221,8 +1272,12 @@ def test_probe_commands_emit_structured_results_and_log_board_output(
                 "adafruit_bus_device",
             ],
             False,
+            False,
+            False,
         ),
-        (["--auto"], "auto", [], True),
+        (["--auto"], "auto", [], True, False, False),
+        (["--py"], "requirements", [], False, True, False),
+        (["--allow-unsupported"], "requirements", [], False, False, True),
     ],
 )
 def test_libs_install_delegates_each_supported_mode(
@@ -1234,8 +1289,10 @@ def test_libs_install_delegates_each_supported_mode(
     expected_mode: str,
     expected_packages: list[str],
     expected_auto: bool,
+    expected_py: bool,
+    expected_allow_unsupported: bool,
 ) -> None:
-    calls: list[tuple[Path, Path, list[str], bool]] = []
+    calls: list[tuple[Path, Path, list[str], bool, bool, str | None, str | None, bool]] = []
     monkeypatch.setattr(cli, "select_target", _selection(target))
 
     def install(
@@ -1244,8 +1301,23 @@ def test_libs_install_delegates_each_supported_mode(
         *,
         packages: list[str],
         auto: bool,
+        py: bool,
+        board_id: str | None,
+        circuitpython_version: str | None,
+        allow_unsupported: bool,
     ) -> CircupResult:
-        calls.append((mount, requirements, packages, auto))
+        calls.append(
+            (
+                mount,
+                requirements,
+                packages,
+                auto,
+                py,
+                board_id,
+                circuitpython_version,
+                allow_unsupported,
+            )
+        )
         return CircupResult(
             returncode=0,
             stdout="installed\n",
@@ -1261,6 +1333,8 @@ def test_libs_install_delegates_each_supported_mode(
     assert payload["result"] == {
         "mode": expected_mode,
         "packages": expected_packages,
+        "py": expected_py,
+        "allow_unsupported": expected_allow_unsupported,
         "returncode": 0,
     }
     assert payload["diagnostics"] == {
@@ -1273,6 +1347,10 @@ def test_libs_install_delegates_each_supported_mode(
             project.requirements_file,
             expected_packages,
             expected_auto,
+            expected_py,
+            "test_board",
+            "10.0.0",
+            expected_allow_unsupported,
         )
     ]
 
@@ -1292,9 +1370,17 @@ def test_libs_install_normalizes_package_auto_conflict(
         *,
         packages: list[str],
         auto: bool,
+        py: bool,
+        board_id: str | None,
+        circuitpython_version: str | None,
+        allow_unsupported: bool,
     ) -> CircupResult:
         assert packages == ["adafruit_requests"]
         assert auto is True
+        assert py is False
+        assert board_id == "test_board"
+        assert circuitpython_version == "10.0.0"
+        assert allow_unsupported is False
         raise DependencyError(
             "circup_arguments_conflict",
             "Named packages and --auto cannot be used together.",
@@ -1317,11 +1403,26 @@ def test_libs_freeze_reports_the_atomically_generated_requirements(
     target: SelectedTarget,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    calls: list[tuple[Path, Path]] = []
+    calls: list[tuple[Path, Path, str | None, str | None, bool]] = []
     monkeypatch.setattr(cli, "select_target", _selection(target))
 
-    def freeze(mount: Path, destination: Path) -> CircupResult:
-        calls.append((mount, destination))
+    def freeze(
+        mount: Path,
+        destination: Path,
+        *,
+        board_id: str | None,
+        circuitpython_version: str | None,
+        allow_unsupported: bool,
+    ) -> CircupResult:
+        calls.append(
+            (
+                mount,
+                destination,
+                board_id,
+                circuitpython_version,
+                allow_unsupported,
+            )
+        )
         destination.write_text(
             "adafruit_bus_device==5.2.10\nadafruit_requests==4.1.10\n",
             encoding="utf-8",
@@ -1335,7 +1436,7 @@ def test_libs_freeze_reports_the_atomically_generated_requirements(
 
     monkeypatch.setattr(cli.circup, "freeze", freeze)
 
-    result = runner.invoke(cli.app, ["libs", "freeze", "--json"])
+    result = runner.invoke(cli.app, ["libs", "freeze", "--allow-unsupported", "--json"])
 
     payload = _json_document(result)
     assert payload["result"] == {
@@ -1344,10 +1445,19 @@ def test_libs_freeze_reports_the_atomically_generated_requirements(
             "adafruit_requests==4.1.10",
         ],
         "path": str(project.requirements_file),
+        "allow_unsupported": True,
         "returncode": 0,
     }
     assert payload["diagnostics"] == {
         "backend": "circup",
         "backend_version": "3.0.4",
     }
-    assert calls == [(_mount(target), project.requirements_file)]
+    assert calls == [
+        (
+            _mount(target),
+            project.requirements_file,
+            "test_board",
+            "10.0.0",
+            True,
+        )
+    ]

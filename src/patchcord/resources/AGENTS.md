@@ -154,6 +154,21 @@ Never choose between ambiguous board candidates. Ask for an explicit `--mount`
 or `--port`, and make sure independently selected drive and serial overrides
 refer to the same physical board.
 
+Legacy CircuitPython firmware may omit the exact board ID from `boot_out.txt`.
+Patchcord does not guess from a product name or USB ID. After independently
+verifying the official ID, tie the assertion to an explicit mount:
+
+```console
+patchcord \
+  --mount /path/to/CIRCUITPY \
+  --legacy-board-id official_board_id \
+  status --json
+```
+
+Use the assertion for later drive operations. It cannot replace a conflicting
+ID published by newer firmware, and the drive must retain a readable, parseable
+CircuitPython boot banner.
+
 - `patchcord init [PATH] [--json]`: create missing project files while
   preserving existing ones.
 - `patchcord status [--json]`: report the selected board, mount, serial port,
@@ -180,10 +195,14 @@ refer to the same physical board.
 - `patchcord probe pins [--json]` and `patchcord probe i2c [--json]`: run
   packaged, bounded probes when supported. An I2C address alone does not prove
   a device model.
-- `patchcord libs install [PACKAGE ...] [--json]`: install project or named
-  CircuitPython libraries through circup.
-- `patchcord libs freeze [--json]`: replace `requirements.txt` with the board's
-  installed library set.
+- `patchcord libs install [PACKAGE ...] [--py] [--allow-unsupported] [--json]`:
+  install project or named CircuitPython libraries through circup. Use the
+  compatibility opt-in only when retaining old firmware is intentional.
+  `--py` explicitly selects source files when no matching compiled artifacts
+  exist; it does not guarantee that current library versions support old
+  firmware, and Patchcord v0.2 cannot select a historical bundle snapshot.
+- `patchcord libs freeze [--allow-unsupported] [--json]`: replace
+  `requirements.txt` with the board's installed library set.
 
 Prefer `--json` and bounded durations for automation. If a command reports an
 unavailable capability, do not bypass Patchcord with a lower-level tool; report
@@ -193,7 +212,9 @@ the diagnostic and use a supported workflow.
 
 - Validate offline before any operation that can interrupt or write to a board.
 - Require an exact match between `hardware.yaml`'s `board.id` and the selected
-  drive. Do not weaken or bypass that gate.
+  drive's published ID or an independently verified `--legacy-board-id`
+  assertion tied to an explicit `--mount`. Never infer the assertion by
+  slugifying a product name. Do not otherwise weaken or bypass that gate.
 - Treat `hardware.yaml` as intended wiring documentation, not proof of
   electrical safety. Ask the user before acting on uncertain voltage, power,
   polarity, or pin assumptions.

@@ -88,9 +88,12 @@ def collect_doctor(project: Project | None) -> dict[str, Any]:
         },
         "libraries": {
             "available": libraries.available,
+            "availability_scope": "backend",
             "backend": libraries.backend,
             "backend_version": libraries.backend_version,
             "reason": libraries.reason,
+            "target_compatibility": "unchecked",
+            "target_reason": "no_read_only_upstream_check",
         },
     }
     project_record: dict[str, Any]
@@ -133,6 +136,7 @@ def collect_doctor(project: Project | None) -> dict[str, Any]:
             {
                 "mount": str(drive.mount),
                 "board_id": drive.board_id,
+                "board_id_source": drive.board_id_source,
                 "circuitpython_version": drive.circuitpython_version,
                 "readable": os.access(drive.mount, os.R_OK),
                 "writable": os.access(drive.mount, os.W_OK),

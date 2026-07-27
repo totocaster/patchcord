@@ -146,6 +146,7 @@ def test_interrupt_sends_ctrl_c_and_is_bounded() -> None:
     assert [data for _, data in connection.writes] == [CTRL_C]
     assert result.raw_output == b">>> "
     assert result.duration == pytest.approx(0.2)
+    assert not result.interrupted
     assert connection.closed
 
 

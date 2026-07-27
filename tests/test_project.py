@@ -6,6 +6,8 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
+import patchcord.cli as cli
+from patchcord.adapters.discovery import SelectedTarget
 from patchcord.cli import app
 from patchcord.hardware.validation import validate_hardware_file
 from patchcord.project import find_project, init_project
@@ -106,6 +108,81 @@ def test_cli_init_json_is_one_document(tmp_path: Path) -> None:
     assert payload["ok"] is True
     assert payload["result"]["root"] == str(project_path)
     assert "AGENTS.md" in payload["result"]["created"]
+
+
+def test_cli_init_from_nested_directory_reuses_nearest_project(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project, _, _ = init_project(tmp_path)
+    nested = project.device_dir / "tools"
+    nested.mkdir()
+    monkeypatch.chdir(nested)
+
+    def no_target(**_kwargs: object) -> SelectedTarget:
+        return SelectedTarget(drive=None, serial=None)
+
+    monkeypatch.setattr(cli, "select_target", no_target)
+
+    result = runner.invoke(app, ["init", ".", "--json"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload["result"]["root"] == str(tmp_path)
+    assert payload["result"]["created"] == []
+    assert sorted(payload["result"]["preserved"]) == [
+        ".gitignore",
+        "AGENTS.md",
+        "device/code.py",
+        "hardware.yaml",
+        "requirements.txt",
+    ]
+    assert not (nested / "hardware.yaml").exists()
+    assert not (nested / "device").exists()
+
+
+def test_cli_init_explicit_child_from_nested_directory_honors_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project, _, _ = init_project(tmp_path)
+    nested = project.device_dir / "tools"
+    nested.mkdir()
+    monkeypatch.chdir(nested)
+
+    def no_target(**_kwargs: object) -> SelectedTarget:
+        return SelectedTarget(drive=None, serial=None)
+
+    monkeypatch.setattr(cli, "select_target", no_target)
+
+    result = runner.invoke(app, ["init", "child", "--json"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    child = nested / "child"
+    assert payload["result"]["root"] == str(child)
+    assert (child / "hardware.yaml").is_file()
+    assert (child / "device" / "code.py").is_file()
+
+
+def test_cli_init_rejects_explicit_existing_file_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    destination = tmp_path / "not-a-directory"
+    destination.write_text("preserve me\n", encoding="utf-8")
+
+    def no_target(**_kwargs: object) -> SelectedTarget:
+        return SelectedTarget(drive=None, serial=None)
+
+    monkeypatch.setattr(cli, "select_target", no_target)
+
+    result = runner.invoke(app, ["init", str(destination), "--json"])
+
+    assert result.exit_code == 16
+    payload = json.loads(result.stdout)
+    assert payload["errors"][0]["code"] == "project_initialization_failed"
+    assert destination.read_text(encoding="utf-8") == "preserve me\n"
 
 
 def test_cli_init_normalizes_non_utf8_gitignore_without_overwriting_it(tmp_path: Path) -> None:

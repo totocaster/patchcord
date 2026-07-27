@@ -14,13 +14,20 @@ Patchcord currently supports CircuitPython boards that expose the standard
 Patchcord requires:
 
 - Python 3.11 or newer;
-- [uv](https://docs.astral.sh/uv/) 0.11.32 or newer; and
 - a board with CircuitPython already installed.
 
-Install the latest stable version from PyPI:
+Install the latest stable version from PyPI with
+[uv](https://docs.astral.sh/uv/) 0.11.32 or newer:
 
 ```console
 uv tool install patchcord
+patchcord --version
+```
+
+Alternatively, install Patchcord into the active Python environment with pip:
+
+```console
+python -m pip install patchcord
 patchcord --version
 ```
 
@@ -68,6 +75,21 @@ my-board/
 
 If discovery is unambiguous, `patchcord init` records the connected board ID in
 `hardware.yaml`. Otherwise, fill in `board.id` before deploying.
+
+CircuitPython releases from before the `Board ID:` line was added to
+`boot_out.txt` cannot publish that exact identity to Patchcord. Patchcord never
+guesses an ID from a product name or USB number. After independently verifying
+the official ID, attach it to an explicit drive for initialization:
+
+```console
+patchcord \
+  --mount /Volumes/CIRCUITPY \
+  --legacy-board-id pyportal_titano \
+  init my-board
+```
+
+Use the same global options for later drive operations. A legacy assertion
+cannot replace a different ID published by newer firmware.
 
 `AGENTS.md` teaches coding agents how to operate Patchcord, work safely with the
 initialized project, and use small Git checkpoints as a durable backup and
@@ -144,7 +166,8 @@ Before copying, Patchcord requires:
 
 - a valid `hardware.yaml`;
 - a selected `CIRCUITPY` drive and serial port;
-- an exact match between `hardware.yaml`'s `board.id` and the selected drive;
+- an exact match between `hardware.yaml`'s `board.id` and the selected drive's
+  published ID or explicit legacy assertion;
   and
 - a `device/code.py` entry point.
 
@@ -218,9 +241,28 @@ patchcord \
 Global options go before the command name. The same pattern works with
 `deploy`, `monitor`, `reset`, `repl`, `libs`, and `hardware validate`.
 
-Patchcord v0.1 selects the drive and serial port independently; it cannot prove
+Patchcord v0.2 selects the drive and serial port independently; it cannot prove
 that two explicit overrides belong to the same physical board. When overriding
 both, make sure they identify the same device.
+
+Old CircuitPython firmware may expose a recognizable drive and serial port but
+omit the exact `Board ID:` field. After verifying the ID against an
+authoritative CircuitPython or board-vendor source, use the deliberately
+explicit legacy assertion:
+
+```console
+patchcord \
+  --mount /Volumes/CIRCUITPY \
+  --port /dev/cu.usbmodem101 \
+  --legacy-board-id pyportal_titano \
+  status
+```
+
+`--legacy-board-id` requires `--mount`, is reported by `status` with
+`board_id_source: legacy_override`, and never overrides a conflicting ID from
+`boot_out.txt`. The drive must still contain a readable, parseable CircuitPython
+boot banner. It is an operator assertion for legacy firmware, not automatic
+board detection.
 
 ## Serial control and REPL
 
@@ -255,7 +297,7 @@ patchcord probe pins
 patchcord probe i2c
 ```
 
-In the current v0.1 release, these bounded commands are unavailable because the
+In the current v0.2 release, these bounded commands are unavailable because the
 pinned execution backend did not pass Patchcord's isolation and reset checks.
 They return `execution_backend_unavailable`. Interactive `repl`, deployment,
 monitoring, serial control, library management, and offline hardware validation
@@ -303,6 +345,31 @@ patchcord libs freeze
 
 This validates circup's generated requirements and atomically replaces
 `requirements.txt`.
+
+Circup rejects CircuitPython releases outside its supported bundle window by
+default. If retaining old firmware is intentional, explicitly opt into
+circup's documented compatibility escape hatch:
+
+```console
+patchcord libs install --allow-unsupported
+patchcord libs freeze --allow-unsupported
+```
+
+Patchcord forwards the selected board ID and CircuitPython version to circup.
+`--allow-unsupported` does not make current libraries compatible with old
+firmware. Very old firmware may also lack matching compiled `.mpy` bundle
+artifacts. In that case, Circup's explicit `--py` option installs source
+libraries instead:
+
+```console
+patchcord libs install --allow-unsupported --py
+```
+
+This selects the source transport format, not historically compatible library
+versions. Patchcord v0.2 does not expose Circup's historical bundle-snapshot
+selection, so a non-empty install onto very old firmware may remain unusable
+even with both flags. `freeze` and an empty-requirements install can still be
+used for inspection and smoke testing without replacing board libraries.
 
 ## Describing and validating hardware
 
@@ -412,7 +479,7 @@ them automatically.
 
 ## Further documentation
 
-- [Patchcord v0.1 CLI and behavior contract](docs/SPEC.md)
+- [Patchcord v0.2 CLI and behavior contract](docs/SPEC.md)
 - [`hardware.yaml` v1 format](docs/WIRING_SPEC.md)
 - [`circremote` 0.12.0 acceptance result](docs/architecture/circremote-0.12.0-acceptance.md)
 - [Mounted-filesystem deployment decision](docs/architecture/deployment-filesystem-exception.md)

@@ -155,16 +155,32 @@ def _run(
     arguments: Sequence[str],
     *,
     timeout: float,
+    board_id: str | None = None,
+    circuitpython_version: str | None = None,
+    allow_unsupported: bool = False,
     cwd: Path | None = None,
     runner: Runner = run_process,
 ) -> CircupResult:
     executable, backend_version = _require_backend()
+    target_arguments: list[str] = []
+    if board_id is not None and circuitpython_version is not None:
+        target_arguments.extend(
+            [
+                "--board-id",
+                board_id,
+                "--cpy-version",
+                circuitpython_version,
+            ]
+        )
+    if allow_unsupported:
+        target_arguments.append("--allow-unsupported")
     argv = [
         executable,
         "--path",
         str(mount.resolve()),
         "--timeout",
         str(max(1, int(timeout))),
+        *target_arguments,
         *arguments,
     ]
     try:
@@ -205,6 +221,10 @@ def install(
     *,
     packages: Sequence[str] = (),
     auto: bool = False,
+    py: bool = False,
+    board_id: str | None = None,
+    circuitpython_version: str | None = None,
+    allow_unsupported: bool = False,
     timeout: float = 600,
     runner: Runner = run_process,
 ) -> CircupResult:
@@ -223,6 +243,8 @@ def install(
             details={"packages": invalid_packages},
         )
     arguments = ["install"]
+    if py:
+        arguments.append("--py")
     if auto:
         arguments.append("--auto")
     elif packages:
@@ -248,7 +270,15 @@ def install(
             message="The project's requirements.txt contains an unsupported entry.",
         )
         arguments.extend(["--requirement", str(requirement_file)])
-    return _run(mount, arguments, timeout=timeout, runner=runner)
+    return _run(
+        mount,
+        arguments,
+        timeout=timeout,
+        board_id=board_id,
+        circuitpython_version=circuitpython_version,
+        allow_unsupported=allow_unsupported,
+        runner=runner,
+    )
 
 
 def _validate_requirements(
@@ -297,6 +327,9 @@ def freeze(
     mount: Path,
     destination: Path,
     *,
+    board_id: str | None = None,
+    circuitpython_version: str | None = None,
+    allow_unsupported: bool = False,
     timeout: float = 600,
     runner: Runner = run_process,
 ) -> CircupResult:
@@ -308,6 +341,9 @@ def freeze(
             mount,
             ["freeze", "--requirement"],
             timeout=timeout,
+            board_id=board_id,
+            circuitpython_version=circuitpython_version,
+            allow_unsupported=allow_unsupported,
             cwd=working_directory,
             runner=runner,
         )

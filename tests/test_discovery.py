@@ -29,6 +29,172 @@ def test_selects_only_drive_and_port(monkeypatch: pytest.MonkeyPatch, tmp_path: 
     assert selected.serial == port
 
 
+def test_inspect_mount_parses_modern_boot_out_board_id(tmp_path: Path) -> None:
+    (tmp_path / "boot_out.txt").write_text(
+        "Adafruit CircuitPython 10.2.1 on 2026-05-12; Test Board with test_mcu\n"
+        "Board ID:test_board\n",
+        encoding="utf-8",
+    )
+
+    drive = discovery.inspect_mount(tmp_path)
+
+    assert drive.board_id == "test_board"
+    assert drive.board_id_source == "boot_out"
+    assert drive.board_name == "Test Board with test_mcu"
+    assert drive.circuitpython_version == "10.2.1"
+
+
+def test_inspect_mount_does_not_invent_id_for_legacy_boot_out(tmp_path: Path) -> None:
+    (tmp_path / "boot_out.txt").write_text(
+        "Adafruit CircuitPython 5.0.0-beta.0 on 2019-11-19; "
+        "Adafruit PyPortal Titano with samd51j20\n",
+        encoding="utf-8",
+    )
+
+    drive = discovery.inspect_mount(tmp_path)
+
+    assert drive.board_id is None
+    assert drive.board_id_source is None
+    assert drive.board_name == "Adafruit PyPortal Titano with samd51j20"
+    assert drive.circuitpython_version == "5.0.0-beta.0"
+
+
+def test_inspect_mount_does_not_combine_unrelated_partial_banner_lines(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "boot_out.txt").write_text(
+        "CircuitPython 5.0.0\nunrelated text; Not a board banner\nBoard ID:not_trusted\n",
+        encoding="utf-8",
+    )
+
+    drive = discovery.inspect_mount(tmp_path)
+
+    assert drive.board_id is None
+    assert drive.board_id_source is None
+    assert drive.board_name is None
+    assert drive.circuitpython_version is None
+
+
+def test_legacy_board_id_can_be_asserted_for_explicit_legacy_mount(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "boot_out.txt").write_text(
+        "Adafruit CircuitPython 5.0.0-beta.0; Adafruit PyPortal Titano with samd51j20\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(discovery, "list_repl_ports", list)
+
+    selected = discovery.select_target(
+        mount=tmp_path,
+        legacy_board_id="pyportal_titano",
+        require_mount=True,
+    )
+
+    assert selected.drive is not None
+    assert selected.drive.board_id == "pyportal_titano"
+    assert selected.drive.board_id_source == "legacy_override"
+    assert selected.public().board_id_source == "legacy_override"
+
+
+def test_legacy_board_id_requires_explicit_mount(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(discovery, "list_circuitpython_drives", lambda: [_drive(tmp_path)])
+
+    with pytest.raises(DiscoveryError) as raised:
+        discovery.select_target(legacy_board_id="test_board")
+
+    assert raised.value.code == "legacy_board_id_requires_mount"
+
+
+@pytest.mark.parametrize("board_id", ["", " ", "two words", "test\tboard"])
+def test_legacy_board_id_must_be_one_nonempty_value(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    board_id: str,
+) -> None:
+    def inspect(_path: Path) -> Drive:
+        return _drive(tmp_path, "")
+
+    monkeypatch.setattr(discovery, "inspect_mount", inspect)
+
+    with pytest.raises(DiscoveryError) as raised:
+        discovery.select_target(mount=tmp_path, legacy_board_id=board_id)
+
+    assert raised.value.code == "invalid_legacy_board_id"
+
+
+def test_legacy_board_id_cannot_replace_published_identity(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    published = _drive(tmp_path, "published_board")
+
+    def inspect(_path: Path) -> Drive:
+        return published
+
+    monkeypatch.setattr(discovery, "inspect_mount", inspect)
+
+    with pytest.raises(DiscoveryError) as raised:
+        discovery.select_target(mount=tmp_path, legacy_board_id="different_board")
+
+    assert raised.value.code == "legacy_board_id_mismatch"
+    assert raised.value.details == {
+        "override": "different_board",
+        "connected": "published_board",
+    }
+
+
+@pytest.mark.parametrize("boot_out", [None, "not a CircuitPython boot banner\n"])
+def test_legacy_board_id_requires_parseable_boot_banner(
+    tmp_path: Path,
+    boot_out: str | None,
+) -> None:
+    mount = tmp_path / "CIRCUITPY"
+    mount.mkdir()
+    if boot_out is not None:
+        (mount / "boot_out.txt").write_text(boot_out, encoding="utf-8")
+
+    with pytest.raises(DiscoveryError) as raised:
+        discovery.select_target(mount=mount, legacy_board_id="test_board")
+
+    assert raised.value.code == "legacy_board_evidence_unavailable"
+    assert raised.value.details == {"mount": str(mount)}
+
+
+def test_legacy_board_id_rejects_unreadable_boot_banner(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mount = tmp_path / "CIRCUITPY"
+    mount.mkdir()
+    boot_out = mount / "boot_out.txt"
+    boot_out.write_text("placeholder\n", encoding="utf-8")
+    original_read_text = Path.read_text
+
+    def unreadable(
+        path: Path,
+        encoding: str | None = None,
+        errors: str | None = None,
+    ) -> str:
+        if path == boot_out:
+            raise PermissionError
+        return original_read_text(
+            path,
+            encoding=encoding,
+            errors=errors,
+        )
+
+    monkeypatch.setattr(Path, "read_text", unreadable)
+
+    with pytest.raises(DiscoveryError) as raised:
+        discovery.select_target(mount=mount, legacy_board_id="test_board")
+
+    assert raised.value.code == "legacy_board_evidence_unavailable"
+
+
 def test_ambiguous_mount_requires_override(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

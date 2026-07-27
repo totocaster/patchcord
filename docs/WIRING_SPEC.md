@@ -306,7 +306,7 @@ connections solely from the interface declaration.
 
 SPI, UART, OneWire, analog, and other interfaces can already be represented as
 nets. Probe-specific metadata for them requires a future schema version because
-Patchcord v0.1 does not probe them.
+Patchcord v0.2 does not probe them.
 
 ### Libraries
 

@@ -61,6 +61,74 @@ def test_install_uses_explicit_mount_and_absolute_requirements(
     assert "CIRCUP_WEBWORKFLOW_PASSWORD" in runner.calls[0][1]["remove_env"]
 
 
+def test_install_forwards_documented_legacy_target_options(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    requirements = tmp_path / "requirements.txt"
+    requirements.write_text("", encoding="utf-8")
+    runner = RecordingRunner()
+    monkeypatch.setattr(circup, "_executable", lambda: "/venv/bin/circup")
+
+    circup.install(
+        tmp_path,
+        requirements,
+        py=True,
+        board_id="pyportal_titano",
+        circuitpython_version="5.0.0-beta.0",
+        allow_unsupported=True,
+        runner=runner,
+    )
+
+    assert runner.calls[0][0] == [
+        "/venv/bin/circup",
+        "--path",
+        str(tmp_path),
+        "--timeout",
+        "600",
+        "--board-id",
+        "pyportal_titano",
+        "--cpy-version",
+        "5.0.0-beta.0",
+        "--allow-unsupported",
+        "install",
+        "--py",
+        "--requirement",
+        str(requirements),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("board_id", "circuitpython_version"),
+    [
+        ("pyportal_titano", None),
+        (None, "5.0.0-beta.0"),
+    ],
+)
+def test_target_options_are_forwarded_only_as_a_complete_pair(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    board_id: str | None,
+    circuitpython_version: str | None,
+) -> None:
+    requirements = tmp_path / "requirements.txt"
+    requirements.write_text("", encoding="utf-8")
+    runner = RecordingRunner()
+    monkeypatch.setattr(circup, "_executable", lambda: "/venv/bin/circup")
+
+    circup.install(
+        tmp_path,
+        requirements,
+        board_id=board_id,
+        circuitpython_version=circuitpython_version,
+        runner=runner,
+    )
+
+    argv = runner.calls[0][0]
+    assert "--board-id" not in argv
+    assert "--cpy-version" not in argv
+
+
 def test_auto_and_packages_conflict(tmp_path: Path) -> None:
     with pytest.raises(DependencyError) as raised:
         circup.install(tmp_path, tmp_path / "requirements.txt", packages=["x"], auto=True)
@@ -134,10 +202,30 @@ def test_freeze_atomically_replaces_requirements(
     runner = RecordingRunner(frozen="adafruit_bus_device==5.2.10\n")
     monkeypatch.setattr(circup, "_executable", lambda: "/venv/bin/circup")
 
-    circup.freeze(mount, destination, runner=runner)
+    circup.freeze(
+        mount,
+        destination,
+        board_id="pyportal_titano",
+        circuitpython_version="5.0.0-beta.0",
+        allow_unsupported=True,
+        runner=runner,
+    )
 
     assert destination.read_text(encoding="utf-8") == "adafruit_bus_device==5.2.10\n"
-    assert runner.calls[0][0][-2:] == ["freeze", "--requirement"]
+    assert runner.calls[0][0] == [
+        "/venv/bin/circup",
+        "--path",
+        str(mount),
+        "--timeout",
+        "600",
+        "--board-id",
+        "pyportal_titano",
+        "--cpy-version",
+        "5.0.0-beta.0",
+        "--allow-unsupported",
+        "freeze",
+        "--requirement",
+    ]
 
 
 def test_freeze_preserves_original_on_invalid_output(

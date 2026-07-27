@@ -1,4 +1,4 @@
-# Patchcord v0.1 Specification
+# Patchcord v0.2 Specification
 
 Patchcord is an agent-facing CLI control plane for humans and coding agents to
 work with CircuitPython boards without a dedicated IDE. It provides one safe,
@@ -8,7 +8,7 @@ coordinates existing CircuitPython tools; it is not a replacement for them.
 
 ## Scope
 
-Patchcord v0.1 supports CircuitPython's USB mass-storage and USB serial
+Patchcord v0.2 supports CircuitPython's USB mass-storage and USB serial
 workflow. The local project is always the source of truth; the removable
 `CIRCUITPY` drive is only a deployment target.
 
@@ -43,7 +43,10 @@ Patchcord can:
   be required; initialization and connected validation inspect optional target
   components as well.
 - `--mount PATH` and `--port PATH` override automatic selection.
-- Patchcord v0.1 does not prove that a selected USB drive and serial port belong
+- `--legacy-board-id ID` may assert an independently verified official ID only
+  for an explicit `--mount` whose `boot_out.txt` does not publish `Board ID:`.
+  It never replaces a different published ID.
+- Patchcord v0.2 does not prove that a selected USB drive and serial port belong
   to the same physical board. When more than one candidate exists, the user
   must provide the appropriate override or overrides.
 - Bounded data-producing commands support `--json`; human-readable output is
@@ -236,24 +239,24 @@ terminal emulator.
 
 ### Capability ownership and preferred adapters
 
-| Capability | Upstream or Patchcord owner | v0.1 rule |
+| Capability | Upstream or Patchcord owner | v0.2 rule |
 |---|---|---|
 | USB filesystem, serial console, REPL, `boot_out.txt`, and runtime pin aliases | CircuitPython | Treat the running board as authoritative; do not reproduce firmware behavior or pin maps. |
 | CircuitPython serial-port recognition | `adafruit-board-toolkit` | Use its public port-enumeration API; Patchcord filters and selects an explicit serial target. |
 | Raw serial transport and control characters | `pyserial` | Use its public API. Patchcord may send the documented `Ctrl-C` and `Ctrl-D` control operations but must not grow this code into a raw-REPL execution engine. |
-| Interactive console | `serial.tools.miniterm` | Invoke the documented terminal CLI. Patchcord owns target selection, port locking, and session metadata, not terminal emulation. v0.1 does not capture the interactive transcript. |
+| Interactive console | `serial.tools.miniterm` | Invoke the documented terminal CLI. Patchcord owns target selection, port locking, and session metadata, not terminal emulation. v0.2 does not capture the interactive transcript. |
 | Bounded code and file execution | `circremote`, subject to the adapter acceptance gate | Prefer its documented CLI with an explicit serial port and isolated configuration. If it fails the gate, report the capability as unavailable until another adapter or documented exception is approved. |
 | Pin enumeration and I²C scanning | Controlled Patchcord probe programs executed by the bounded-execution adapter | Patchcord owns the small, deterministic probe payload and JSON schema; the execution adapter owns REPL transport. Do not maintain board or device catalogs. |
 | CircuitPython library resolution and installation | `circup` | Invoke its documented CLI with the explicit selected mount. Patchcord must not solve dependencies or select bundle artifacts. |
 | Deployment copy | Patchcord's deliberately small mounted-filesystem adapter | Enforce Patchcord's protected-file, copy-order, and non-deletion policy. Do not build a general synchronization or remote-filesystem engine. |
 | Deployment operation ordering and provenance | Patchcord | These are cross-tool safety and project-workflow responsibilities. Git is the recovery mechanism for the local `device/` source. |
-| Mount/serial selection and device ambiguity | Patchcord using upstream metadata | Select each required target component explicitly or only when independently unambiguous; never let a child tool choose a different device. Physical drive/port correlation is not implemented in v0.1. |
+| Mount/serial selection and device ambiguity | Patchcord using upstream metadata | Select each required target component explicitly or only when independently unambiguous; never let a child tool choose a different device. Physical drive/port correlation is not implemented in v0.2. |
 | Persistent logs, traceback classification, JSON result envelopes, and host-side JSONL operation evidence | Patchcord | Normalize upstream behavior into a stable agent contract and retain enough evidence for a later agent to diagnose a run. |
 | Project wiring and expected interfaces | `hardware.yaml` and Patchcord validation | Keep project-local integration facts only; defer board pins, library metadata, and component catalogs to their authoritative sources. |
 
 ### Bounded-execution adapter
 
-`circremote` is the candidate v0.1 backend for `repl --eval`, `repl --file`,
+`circremote` is the candidate v0.2 backend for `repl --eval`, `repl --file`,
 and connected probes because it already executes CircuitPython code over serial
 and supports CircuitPython-specific utility commands. The pinned 0.12.0 release
 failed the acceptance gate, and the implementation's exact-version allowlist is
@@ -290,7 +293,7 @@ adapter after passing the same acceptance tests.
 ### Deployment adapter decision
 
 Existing deployment tools were evaluated before the mounted-filesystem adapter
-was implemented. For v0.1, `circdeploy` is not the deployment backend because
+was implemented. For v0.2, `circdeploy` is not the deployment backend because
 its documented contract does not provide Patchcord's protected-file gating,
 support-files-before-`code.py` ordering, selected mount plus command-layer
 serial coordination, reset, startup capture, and traceback classification. Its
@@ -325,7 +328,7 @@ acceptance tests.
 
 ### Current upstream evaluation record
 
-This table records the implemented v0.1 decisions; versions and capabilities
+This table records the implemented v0.2 decisions; versions and capabilities
 must be checked again before each major release.
 
 | Project | Decision | Reason |
@@ -334,7 +337,7 @@ must be checked again before each major release.
 | [`adafruit-board-toolkit`](https://github.com/adafruit/Adafruit_Board_Toolkit) | Adopt | It provides Adafruit-maintained CircuitPython serial-port recognition without requiring a Patchcord device table. |
 | [`pyserial`](https://github.com/pyserial/pyserial) | Adopt | It provides the portable serial transport, port metadata, timeouts, and reusable miniterm component. |
 | [`circremote`](https://github.com/romkey/circremote) | Reject 0.12.0; default-deny other versions | Version 0.12.0 reads and creates user configuration before honoring `--config`, contaminates board output, and did not satisfy reset/timeout requirements. See [`architecture/circremote-0.12.0-acceptance.md`](architecture/circremote-0.12.0-acceptance.md). |
-| [`circdeploy`](https://pypi.org/project/circdeploy/) | Do not adopt for v0.1 deployment | Its documented copy/delete contract lacks Patchcord's protected-file policy, copy ordering, explicit target control, reset, capture, and agent result contract. Re-evaluate if those guarantees are added. |
+| [`circdeploy`](https://pypi.org/project/circdeploy/) | Do not adopt for v0.2 deployment | Its documented copy/delete contract lacks Patchcord's protected-file policy, copy ordering, explicit target control, reset, capture, and agent result contract. Re-evaluate if those guarantees are added. |
 | [`Piku`](https://pypi.org/project/piku/) | Do not adopt as a foundation | Its broad project/deploy/serial workflow overlaps Patchcord but carries early-development and destructive-deployment warnings and does not provide the required agent contract. |
 | [`chumicro-deploy-experimental`](https://pypi.org/project/chumicro-deploy-experimental/) | Track, do not require | Its programmatic deployment and recovery model is relevant, but the experimental channel is pre-alpha and does not currently satisfy Patchcord's native-Windows portability requirement. Re-evaluate the stable, publicly auditable package when available. |
 | [`mpremote`](https://docs.micropython.org/en/latest/reference/mpremote.html) and [`pyboard.py`](https://docs.micropython.org/en/latest/reference/pyboard.py.html) | Do not assume compatibility | They are MicroPython tools. They remain candidates only if their required operations are documented and verified against the supported CircuitPython matrix. |
@@ -345,9 +348,14 @@ must be checked again before each major release.
   library catalog, or copy of the Adafruit or Community CircuitPython bundles.
 - Board identity and firmware come from the connected board's `boot_out.txt`,
   USB/serial metadata, and bounded REPL queries.
+- Legacy firmware that omits `Board ID:` may use an explicit
+  `--legacy-board-id` assertion tied to an explicit mount. Patchcord does not
+  infer the value from USB descriptors or a normalized product name, and
+  reports the assertion as `board_id_source: legacy_override`. A readable,
+  parseable CircuitPython boot banner remains required.
 - CircuitPython serial-port recognition comes from `adafruit-board-toolkit`;
   raw serial access comes from `pyserial`.
-- Drive and serial candidates are selected independently. v0.1 does not
+- Drive and serial candidates are selected independently. v0.2 does not
   correlate them by USB location or physical-device identity.
 - Pin names come from the board's runtime `board` module. They are not copied
   into Patchcord.
@@ -375,14 +383,16 @@ Git-managed local project as the durable source of truth and notes that
 deployment does not delete obsolete board files.
 
 If an unambiguous CircuitPython drive is selected, initialization records its
-board ID. Existing project files, including an existing `AGENTS.md`, are
-preserved. Implicit discovery ambiguity leaves the board ID empty; an invalid
-explicit override is an error.
+board ID. Legacy firmware without a published ID can be initialized with
+`--mount PATH --legacy-board-id ID`; the assertion requires independent
+verification and an explicit mount. Existing project files, including an
+existing `AGENTS.md`, are preserved. Implicit discovery ambiguity leaves the
+board ID empty; an invalid explicit override is an error.
 
 ### `patchcord status [--json]`
 
-Reports the selected board's ID, name, CircuitPython version, mount path, serial
-port, and available storage.
+Reports the selected board's ID, identity source, name, CircuitPython version,
+mount path, serial port, and available storage.
 
 ### `patchcord doctor [--json]`
 
@@ -392,14 +402,18 @@ capabilities; mount and serial permissions; project-file validity; and any
 acceptance-gate failure that makes a command unavailable. It never installs,
 updates, repairs, or silently switches a dependency. Its JSON uses stable
 Patchcord capability and error codes rather than requiring an agent to parse an
-upstream version string.
+upstream version string. The library capability reports Circup backend
+availability separately from `target_compatibility: unchecked`, because Circup
+does not provide a documented, read-only, machine-readable compatibility check;
+an explicit library operation remains authoritative for the selected target.
 
 ### `patchcord deploy [--capture SECONDS] [--allow-boot] [--allow-settings] [--json]`
 
 Deploys `device/` to the selected board.
 
 - Requires offline-valid `hardware.yaml` and an exact match between its
-  `board.id` and the selected drive's `boot_out.txt` board ID.
+  `board.id` and the selected drive's published board ID or explicit legacy
+  assertion.
 - Interrupts the running program, copies support files first and `code.py` last,
   then soft-resets once.
 - Creates and updates files but never deletes unrelated board files.
@@ -430,7 +444,11 @@ the last 200 lines. Durations use forms such as `30s`, `10m`, and `2h`.
 
 Sends `Ctrl-C` to stop the running program and returns the resulting console
 output. This is a bounded `pyserial` control operation, not a general raw-REPL
-execution implementation.
+execution implementation. A successful JSON result reports
+`interrupt_sent: true`; captured console text remains the evidence of the
+board's response. Schema v1 also retains `interrupted: true` as a deprecated
+compatibility alias for a successfully sent interrupt request; neither field
+claims that the board's application state was independently confirmed.
 
 ### `patchcord reset [--capture SECONDS] [--json]`
 
@@ -473,7 +491,7 @@ program performs the scan through the bounded-execution adapter and releases
 the bus in a `finally` block. Patchcord does not infer a sensor model solely
 from an address.
 
-### `patchcord libs install [PACKAGE ...] [--auto] [--json]`
+### `patchcord libs install [PACKAGE ...] [--auto] [--py] [--allow-unsupported] [--json]`
 
 Runs `circup` against the selected board. Package arguments install named
 libraries; no arguments install the project `requirements.txt`; `--auto`
@@ -482,22 +500,31 @@ on the selected board. Patchcord does not perform a second local import
 analysis. Package arguments and `--auto` are mutually exclusive.
 
 Patchcord invokes the documented CLI with `circup --path SELECTED_MOUNT ...`,
-uses an explicit absolute requirements-file path, records the `circup` version
-and exit status, and does not duplicate dependency resolution or bundle
-selection. Because `circup` does not promise a Patchcord JSON schema, its human
-progress text is captured so it cannot corrupt Patchcord JSON; it is shown only
-in human-readable mode and is not parsed into public result fields. Patchcord
-refuses to run when it detects user-level circup bundle configuration that the
-documented CLI cannot disable.
+uses an explicit absolute requirements-file path, forwards the selected
+`board_id` and CircuitPython version when both are available, records the
+`circup` version and exit status, and does not duplicate dependency resolution
+or bundle selection. `--allow-unsupported` forwards circup's documented global
+flag and is never enabled implicitly. `--py` forwards Circup's documented
+install option to select source `.py` libraries instead of compiled `.mpy`
+artifacts; Patchcord never enables it implicitly, and it does not select
+historically compatible bundle versions. Patchcord v0.2 does not expose
+Circup's bundle-snapshot selector, so source installation on very old firmware
+may still be unavailable for non-empty requirements. Because `circup` does not
+promise a Patchcord JSON schema, its human progress text is captured so it
+cannot corrupt Patchcord JSON; it is shown only in human-readable mode and is
+not parsed into public result fields. Patchcord refuses to run when it detects
+user-level circup bundle configuration that the documented CLI cannot disable.
 
-### `patchcord libs freeze [--json]`
+### `patchcord libs freeze [--allow-unsupported] [--json]`
 
 Writes the board's installed CircuitPython libraries and available version
 information to `requirements.txt` through `circup`'s documented CLI. Patchcord
 runs `circup --path SELECTED_MOUNT freeze --requirement` in a temporary working
 directory, validates the generated requirements file, and atomically replaces
 the project file. It does not derive installed-library versions itself or
-scrape the human-readable `circup freeze` table.
+scrape the human-readable `circup freeze` table. The explicit
+`--allow-unsupported` flag has the same forwarding behavior and compatibility
+caveat as installation.
 
 ### `patchcord hardware validate [--json] [--offline]`
 
@@ -522,7 +549,7 @@ electrical safety.
 - Require explicit flags before writing root `boot.py` or `settings.toml`.
 - Start serial capture before reset so startup failures are not missed.
 
-## Out of scope for v0.1
+## Out of scope for v0.2
 
 - Installing or flashing CircuitPython firmware
 - BLE and Web Workflow transports

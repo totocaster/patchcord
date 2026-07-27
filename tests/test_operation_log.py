@@ -17,7 +17,11 @@ def test_operation_log_redacts_sensitive_fields_and_omits_board_output(tmp_path:
     record_operation(
         project,
         command="deploy",
-        target=TargetInfo(mount="/Volumes/CIRCUITPY"),
+        target=TargetInfo(
+            board_id="pyportal_titano",
+            board_id_source="legacy_override",
+            mount="/Volumes/CIRCUITPY",
+        ),
         ok=True,
         result={"settings_path": "settings.toml", "created": ["code.py"]},
         diagnostics={"api_token": "do-not-log"},
@@ -27,6 +31,7 @@ def test_operation_log_redacts_sensitive_fields_and_omits_board_output(tmp_path:
     assert payload["result"]["settings_path"] == "[redacted]"
     assert payload["diagnostics"]["api_token"] == "[redacted]"
     assert payload["result"]["created"] == ["code.py"]
+    assert payload["target"]["board_id_source"] == "legacy_override"
 
 
 def test_operation_log_filesystem_failure_is_normalized(

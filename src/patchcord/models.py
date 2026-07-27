@@ -23,6 +23,7 @@ class TargetInfo(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     board_id: str | None = None
+    board_id_source: Literal["boot_out", "legacy_override"] | None = None
     board_name: str | None = None
     circuitpython_version: str | None = None
     mount: str | None = None
