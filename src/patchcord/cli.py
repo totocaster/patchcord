@@ -309,8 +309,8 @@ def init_command(
             json_output=json_output,
         )
         return
-    created_paths = [str(item.relative_to(project.root)) for item in created]
-    preserved_paths = [str(item.relative_to(project.root)) for item in preserved]
+    created_paths = [item.relative_to(project.root).as_posix() for item in created]
+    preserved_paths = [item.relative_to(project.root).as_posix() for item in preserved]
     result = {
         "root": str(project.root),
         "created": created_paths,

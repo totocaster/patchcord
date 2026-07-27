@@ -387,7 +387,8 @@ board ID. Legacy firmware without a published ID can be initialized with
 `--mount PATH --legacy-board-id ID`; the assertion requires independent
 verification and an explicit mount. Existing project files, including an
 existing `AGENTS.md`, are preserved. Implicit discovery ambiguity leaves the
-board ID empty; an invalid explicit override is an error.
+board ID empty; an invalid explicit override is an error. In JSON output,
+created and preserved project-relative paths use `/` separators on every host.
 
 ### `patchcord status [--json]`
 

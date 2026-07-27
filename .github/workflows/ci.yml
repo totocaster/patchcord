@@ -26,12 +26,12 @@ jobs:
           version: "0.11.32"
       - run: uv python install "${{ matrix.python-version }}"
       - run: uv sync --locked --python "${{ matrix.python-version }}"
-      - run: uv run --locked pytest
+      - run: uv run --locked --python "${{ matrix.python-version }}" pytest
       - if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.14'
-        run: uv run --locked ruff check .
+        run: uv run --locked --python "${{ matrix.python-version }}" ruff check .
       - if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.14'
-        run: uv run --locked ruff format --check .
+        run: uv run --locked --python "${{ matrix.python-version }}" ruff format --check .
       - if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.14'
-        run: uv run --locked basedpyright
+        run: uv run --locked --python "${{ matrix.python-version }}" basedpyright
       - if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.14'
         run: uv build --no-sources
