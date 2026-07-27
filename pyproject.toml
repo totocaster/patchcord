@@ -8,6 +8,8 @@ version = "0.1.0"
 description = "Agent-facing control plane for CircuitPython boards"
 readme = "README.md"
 requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
 dependencies = [
     "adafruit-board-toolkit>=1.1.2,<2",
     "appdirs>=1.4.4,<2",
@@ -21,6 +23,12 @@ dependencies = [
     "ruamel-yaml>=0.19.1,<0.20",
     "typer>=0.27.0,<0.28",
 ]
+
+[project.urls]
+Homepage = "https://github.com/totocaster/patchcord"
+Repository = "https://github.com/totocaster/patchcord"
+Issues = "https://github.com/totocaster/patchcord/issues"
+Changelog = "https://github.com/totocaster/patchcord/releases"
 
 [project.scripts]
 patchcord = "patchcord.cli:main"

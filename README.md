@@ -17,11 +17,17 @@ Patchcord requires:
 - [uv](https://docs.astral.sh/uv/) 0.11.32 or newer; and
 - a board with CircuitPython already installed.
 
-Install the latest version directly from GitHub:
+Install the latest stable version from PyPI:
+
+```console
+uv tool install patchcord
+patchcord --version
+```
+
+To try the unreleased development version instead:
 
 ```console
 uv tool install git+https://github.com/totocaster/patchcord.git
-patchcord --version
 ```
 
 To run Patchcord from a source checkout instead:
@@ -424,3 +430,5 @@ uv build --no-sources
 
 Bug reports and contributions are welcome through
 [GitHub Issues](https://github.com/totocaster/patchcord/issues).
+
+Patchcord is released under the [MIT License](LICENSE).

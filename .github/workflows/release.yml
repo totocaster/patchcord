@@ -1,0 +1,128 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    name: CI
+    uses: ./.github/workflows/ci.yml
+
+  build:
+    name: Build release artifacts
+    needs: ci
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the tagged source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          version: "0.11.32"
+
+      - name: Install the minimum supported Python
+        run: uv python install 3.11
+
+      - name: Validate the release tag
+        shell: bash
+        run: |
+          project_version="$(uv version --short)"
+          tag_version="${GITHUB_REF_NAME#v}"
+          if [[ "$tag_version" != "$project_version" ]]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match project version $project_version"
+            exit 1
+          fi
+          git fetch origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::Release commit is not reachable from origin/main"
+            exit 1
+          fi
+
+      - name: Build the wheel and source distribution
+        run: uv build --no-sources
+
+      - name: Check distribution metadata
+        run: uvx --from "twine==6.2.0" twine check --strict dist/*
+
+      - name: Smoke-test the wheel
+        env:
+          EXPECTED_VERSION: ${{ github.ref_name }}
+        run: |
+          EXPECTED_VERSION="${EXPECTED_VERSION#v}" \
+            uv run --isolated --no-project --with ./dist/*.whl tests/smoke_test.py
+
+      - name: Smoke-test the source distribution
+        env:
+          EXPECTED_VERSION: ${{ github.ref_name }}
+        run: |
+          EXPECTED_VERSION="${EXPECTED_VERSION#v}" \
+            uv run --isolated --no-project --with ./dist/*.tar.gz tests/smoke_test.py
+
+      - name: Create checksums
+        run: sha256sum dist/* > SHA256SUMS
+
+      - name: Store release artifacts
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: python-distributions
+          path: |
+            dist/
+            SHA256SUMS
+          if-no-files-found: error
+
+  publish:
+    name: Publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/patchcord/
+    permissions:
+      id-token: write
+
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: python-distributions
+          path: dist/
+
+      - name: Publish the distributions
+        uses: pypa/gh-action-pypi-publish@ba38be9e461d3875417946c167d0b5f3d385a247 # release/v1
+
+  github-release:
+    name: Create GitHub Release
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: python-distributions
+          path: dist/
+
+      - name: Publish the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* SHA256SUMS \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --generate-notes \
+            --title "Patchcord ${GITHUB_REF_NAME#v}"
