@@ -1,0 +1,29 @@
+import board
+import json
+
+bus = None
+addresses = []
+try:
+    bus = board.I2C()
+    for _ in range(1000):
+        if bus.try_lock():
+            break
+    else:
+        raise RuntimeError("default I2C bus remained locked")
+    addresses = bus.scan()
+finally:
+    if bus is not None:
+        try:
+            bus.unlock()
+        except Exception:
+            pass
+        try:
+            bus.deinit()
+        except Exception:
+            pass
+
+print("__PATCHCORD_RESULT_V1__" + json.dumps({
+    "schema_version": 1,
+    "kind": "i2c",
+    "addresses": addresses,
+}))

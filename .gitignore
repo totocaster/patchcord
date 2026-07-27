@@ -1,0 +1,24 @@
+# Patchcord runtime state
+.patchcord/
+
+# CircuitPython secrets
+device/settings.toml
+
+# Python environments and caches
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.basedpyright/
+
+# Coverage and build artifacts
+.coverage
+.coverage.*
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# macOS
+.DS_Store

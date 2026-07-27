@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ["3.11", "3.14"]
+
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v8
+        with:
+          enable-cache: true
+      - run: uv python install "${{ matrix.python-version }}"
+      - run: uv sync --locked --python "${{ matrix.python-version }}"
+      - run: uv run --locked pytest
+      - if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.14'
+        run: uv run --locked ruff check .
+      - if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.14'
+        run: uv run --locked ruff format --check .
+      - if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.14'
+        run: uv run --locked basedpyright
+      - if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.14'
+        run: uv build --no-sources

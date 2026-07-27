@@ -1,0 +1,236 @@
+{
+  "$defs": {
+    "BoardDefinition": {
+      "additionalProperties": false,
+      "description": "The intended CircuitPython board model.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "BoardDefinition",
+      "type": "object"
+    },
+    "I2CInterface": {
+      "additionalProperties": false,
+      "description": "An expected device on CircuitPython's default I\u00b2C bus.",
+      "properties": {
+        "address": {
+          "maximum": 127,
+          "minimum": 0,
+          "title": "Address",
+          "type": "integer"
+        },
+        "bus": {
+          "const": "default",
+          "title": "Bus",
+          "type": "string"
+        },
+        "kind": {
+          "const": "i2c",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "bus",
+        "address"
+      ],
+      "title": "I2CInterface",
+      "type": "object"
+    },
+    "NetDefinition": {
+      "additionalProperties": false,
+      "description": "A logical electrical connection between board and part pins.",
+      "properties": {
+        "endpoints": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Endpoints",
+          "type": "array"
+        },
+        "notes": {
+          "title": "Notes",
+          "type": "string"
+        },
+        "role": {
+          "$ref": "#/$defs/NetRole"
+        },
+        "voltage": {
+          "exclusiveMinimum": 0,
+          "title": "Voltage",
+          "type": "number"
+        }
+      },
+      "required": [
+        "role",
+        "endpoints"
+      ],
+      "title": "NetDefinition",
+      "type": "object"
+    },
+    "NetRole": {
+      "description": "Logical net roles supported by hardware schema version 1.",
+      "enum": [
+        "power",
+        "ground",
+        "signal",
+        "analog",
+        "other"
+      ],
+      "title": "NetRole",
+      "type": "string"
+    },
+    "PartDefinition": {
+      "additionalProperties": false,
+      "description": "A project-local external part.",
+      "properties": {
+        "interfaces": {
+          "items": {
+            "$ref": "#/$defs/I2CInterface"
+          },
+          "title": "Interfaces",
+          "type": "array"
+        },
+        "kind": {
+          "minLength": 1,
+          "title": "Kind",
+          "type": "string"
+        },
+        "libraries": {
+          "items": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$",
+            "type": "string"
+          },
+          "title": "Libraries",
+          "type": "array"
+        },
+        "model": {
+          "title": "Model",
+          "type": "string"
+        },
+        "notes": {
+          "title": "Notes",
+          "type": "string"
+        },
+        "pins": {
+          "additionalProperties": false,
+          "patternProperties": {
+            "^[^.]+$": {
+              "$ref": "#/$defs/PinDefinition"
+            }
+          },
+          "propertyNames": {
+            "minLength": 1
+          },
+          "title": "Pins",
+          "type": "object"
+        },
+        "value": {
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "pins"
+      ],
+      "title": "PartDefinition",
+      "type": "object"
+    },
+    "PinDefinition": {
+      "additionalProperties": false,
+      "description": "A documented pin on an external part.",
+      "properties": {
+        "notes": {
+          "title": "Notes",
+          "type": "string"
+        },
+        "role": {
+          "$ref": "#/$defs/PinRole",
+          "title": "Role"
+        }
+      },
+      "title": "PinDefinition",
+      "type": "object"
+    },
+    "PinRole": {
+      "description": "Electrical and protocol roles supported for part pins.",
+      "enum": [
+        "power_in",
+        "power_out",
+        "ground",
+        "passive",
+        "digital_in",
+        "digital_out",
+        "digital_io",
+        "analog_in",
+        "analog_out",
+        "i2c_sda",
+        "i2c_scl",
+        "spi_clock",
+        "spi_mosi",
+        "spi_miso",
+        "uart_tx",
+        "uart_rx",
+        "chip_select",
+        "interrupt",
+        "other"
+      ],
+      "title": "PinRole",
+      "type": "string"
+    }
+  },
+  "$id": "https://patchcord.dev/schema/hardware-v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "The complete, versioned ``hardware.yaml`` document.",
+  "properties": {
+    "board": {
+      "$ref": "#/$defs/BoardDefinition"
+    },
+    "nets": {
+      "additionalProperties": false,
+      "patternProperties": {
+        "^[a-z][a-z0-9_-]*$": {
+          "$ref": "#/$defs/NetDefinition"
+        }
+      },
+      "title": "Nets",
+      "type": "object"
+    },
+    "notes": {
+      "title": "Notes",
+      "type": "string"
+    },
+    "parts": {
+      "additionalProperties": false,
+      "patternProperties": {
+        "^[a-z][a-z0-9_-]*$": {
+          "$ref": "#/$defs/PartDefinition"
+        }
+      },
+      "title": "Parts",
+      "type": "object"
+    },
+    "schema_version": {
+      "const": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schema_version",
+    "board",
+    "parts",
+    "nets"
+  ],
+  "title": "Patchcord hardware.yaml v1",
+  "type": "object"
+}

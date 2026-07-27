@@ -1,0 +1,62 @@
+[build-system]
+requires = ["uv_build>=0.11.32,<0.12"]
+build-backend = "uv_build"
+
+[project]
+name = "patchcord"
+version = "0.1.0"
+description = "Agent-facing control plane for CircuitPython boards"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "adafruit-board-toolkit>=1.1.2,<2",
+    "appdirs>=1.4.4,<2",
+    "circremote==0.12.0",
+    "circup>=3.0.4,<4",
+    "filelock>=3.32.0,<4",
+    "psutil>=7.2.2,<8",
+    "pydantic>=2.13.4,<3",
+    "pyserial>=3.5,<4",
+    "rich>=15.0.0,<16",
+    "ruamel-yaml>=0.19.1,<0.20",
+    "typer>=0.27.0,<0.28",
+]
+
+[project.scripts]
+patchcord = "patchcord.cli:main"
+
+[dependency-groups]
+dev = [
+    "basedpyright>=1.39.9,<2",
+    "pytest>=9.1.1,<10",
+    "ruff>=0.16.0,<0.17",
+]
+
+[tool.uv]
+required-version = ">=0.11.32"
+
+[tool.uv.build-backend]
+source-include = ["docs/**"]
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+    "B",
+    "E",
+    "F",
+    "I",
+    "SIM",
+    "UP",
+]
+
+[tool.basedpyright]
+include = ["src", "tests"]
+pythonVersion = "3.11"
+typeCheckingMode = "strict"
